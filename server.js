@@ -101,7 +101,16 @@ async function fillInventory(reservationId, categories) {
     console.log("🖱️ Clicked login");
 
     await page.waitForLoadState("domcontentloaded");
-    await delay(3000);
+    await delay(2000);
+
+    // Handle "Active Session" dialog if it appears
+    const continueBtn = page.locator('button:has-text("CONTINUE"), button:has-text("Continue")').first();
+    if (await continueBtn.isVisible().catch(() => false)) {
+      await continueBtn.click();
+      console.log("✅ Dismissed Active Session dialog — clicked CONTINUE");
+      await delay(2000);
+    }
+
     console.log("📍 URL after login:", page.url());
     await page.screenshot({ path: "/tmp/03-after-login.png" });
     console.log("📸 Screenshot: 03-after-login.png");
