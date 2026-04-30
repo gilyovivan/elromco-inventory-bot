@@ -1,0 +1,43 @@
+[phases.setup]
+nixPkgs = [
+  "nodejs_20",
+  "chromium",
+  "nss",
+  "freetype",
+  "freetype-headers",
+  "harfbuzz",
+  "ca-certificates",
+  "ttf-dejavu",
+  "alsa-lib",
+  "atk",
+  "at-spi2-atk",
+  "cups",
+  "dbus",
+  "expat",
+  "fontconfig",
+  "gdk-pixbuf",
+  "glib",
+  "gtk3",
+  "libdrm",
+  "libgbm",
+  "libx11",
+  "libxcb",
+  "libxcomposite",
+  "libxdamage",
+  "libxext",
+  "libxfixes",
+  "libxi",
+  "libxrandr",
+  "libxrender",
+  "libxshmfence",
+  "libxtst",
+  "nspr",
+  "pango",
+  "xorg.libXScrnSaver"
+]
+
+[phases.install]
+cmds = ["npm install", "npx playwright install chromium --with-deps"]
+
+[start]
+cmd = "node server.js"
