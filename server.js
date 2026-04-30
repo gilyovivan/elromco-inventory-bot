@@ -71,13 +71,16 @@ async function fillInventory(reservationId, categories) {
       }
     }
 
-    // Company ID if needed
+    // Fill by placeholder — correct order:
+    // Input[0]: email/login (you@company.com)
+    // Input[1]: password (Enter your password)
+    // Input[2]: company ID (Enter your company ID)
     const allInputs = await page.locator("input").all();
     if (allInputs.length >= 3) {
-      await allInputs[1].fill(ELROMCO_COMPID);
-      console.log("✅ Filled company ID");
-      await allInputs[2].fill(ELROMCO_PASS);
-      console.log("✅ Filled password (3rd input)");
+      await allInputs[1].fill(ELROMCO_PASS);
+      console.log("✅ Filled password (input[1])");
+      await allInputs[2].fill(ELROMCO_COMPID);
+      console.log("✅ Filled company ID (input[2])");
     } else {
       await page.fill('input[type="password"]', ELROMCO_PASS);
       console.log("✅ Filled password input");
