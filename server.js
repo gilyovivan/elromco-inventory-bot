@@ -122,35 +122,27 @@ async function fillInventory(reservationId, categories) {
       console.log(`  btn[${i}]: text="${txt2.trim().slice(0,30)}" aria="${aria}"`);
     }
 
-    // Try to find search - click magnifier icon
-    const searchIcon = page.locator('[aria-label*="search" i], [data-testid="SearchIcon"], svg[data-testid="SearchIcon"]').first();
-    if (await searchIcon.count() > 0) {
-      await searchIcon.click();
-      console.log("✅ Clicked search icon by aria-label");
-    } else {
-      // Click the search button by position - usually top nav
-      const navBtns = await page.locator("header button, nav button, [role='banner'] button").all();
-      console.log(`🔍 Found ${navBtns.length} nav buttons`);
-      if (navBtns.length > 0) {
-        await navBtns[0].click();
-        console.log("✅ Clicked first nav button");
-      }
-    }
+    // Search icon is the magnifier 🔍 in top nav — click by coordinates
+    // From screenshot: lupa is at approximately x=362, y=37
+    await page.mouse.click(362, 37);
+    console.log("✅ Clicked search icon by coordinates (362, 37)");
     await delay(1500);
     await page.screenshot({ path: "/tmp/04-search-open.png" });
 
     // Check if search input appeared
     const searchInput = page.locator('input[placeholder*="earch" i], input[type="search"]').first();
-    const searchVisible = await searchInput.isVisible().catch(() => false);
-    console.log(`🔍 Search input visible: ${searchVisible}`);
+    let searchVisible = await searchInput.isVisible().catch(() => false);
+    console.log(`🔍 Search input visible after click: ${searchVisible}`);
 
+    // If not visible, try slightly different coordinates
     if (!searchVisible) {
-      // Try keyboard shortcut
-      await page.keyboard.press("Control+k");
-      await delay(500);
-      const visible2 = await searchInput.isVisible().catch(() => false);
-      console.log(`🔍 Search after Ctrl+K: ${visible2}`);
-      await page.screenshot({ path: "/tmp/04b-search-kbd.png" });
+      for (const [x, y] of [[360, 38], [365, 36], [370, 40], [355, 37]]) {
+        await page.mouse.click(x, y);
+        await delay(800);
+        searchVisible = await searchInput.isVisible().catch(() => false);
+        if (searchVisible) { console.log(`✅ Search opened at (${x}, ${y})`); break; }
+        console.log(`  Tried (${x}, ${y}): not visible`);
+      }
     }
 
     await searchInput.waitFor({ timeout: 8000 });
