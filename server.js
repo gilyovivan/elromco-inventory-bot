@@ -106,26 +106,51 @@ async function fillInventory(reservationId, categories) {
     // ── 2. SEARCH ────────────────────────────────────────────────────────────
     console.log(`🔍 Searching for ${reservationId}...`);
 
-    // Look for search icon/button
-    const searchBtns = await page.locator('[aria-label*="search" i], [data-testid*="search" i], button:has(svg)').all();
-    console.log(`🔍 Found ${searchBtns.length} potential search buttons`);
+    // After login - take screenshot to see current state
+    await page.screenshot({ path: "/tmp/03b-dashboard.png" });
+    console.log("📸 Dashboard screenshot saved");
 
-    // Click search icon
-    const searchIcon = page.locator('[aria-label*="search" i], [data-testid="SearchIcon"]').first();
+    // Log all buttons on page for debugging
+    const allBtns = await page.locator("button").all();
+    console.log(`🔍 Found ${allBtns.length} buttons on dashboard`);
+    for (let i = 0; i < Math.min(allBtns.length, 8); i++) {
+      const txt2 = await allBtns[i].innerText().catch(() => "");
+      const aria = await allBtns[i].getAttribute("aria-label").catch(() => "");
+      console.log(`  btn[${i}]: text="${txt2.trim().slice(0,30)}" aria="${aria}"`);
+    }
+
+    // Try to find search - click magnifier icon
+    const searchIcon = page.locator('[aria-label*="search" i], [data-testid="SearchIcon"], svg[data-testid="SearchIcon"]').first();
     if (await searchIcon.count() > 0) {
       await searchIcon.click();
-      console.log("✅ Clicked search icon");
+      console.log("✅ Clicked search icon by aria-label");
     } else {
-      // Try clicking magnifier svg button
-      await page.locator("button").first().click();
-      console.log("✅ Clicked first button as search");
+      // Click the search button by position - usually top nav
+      const navBtns = await page.locator("header button, nav button, [role='banner'] button").all();
+      console.log(`🔍 Found ${navBtns.length} nav buttons`);
+      if (navBtns.length > 0) {
+        await navBtns[0].click();
+        console.log("✅ Clicked first nav button");
+      }
     }
-    await delay(1000);
+    await delay(1500);
     await page.screenshot({ path: "/tmp/04-search-open.png" });
 
-    // Type in search
+    // Check if search input appeared
     const searchInput = page.locator('input[placeholder*="earch" i], input[type="search"]').first();
-    await searchInput.waitFor({ timeout: 5000 });
+    const searchVisible = await searchInput.isVisible().catch(() => false);
+    console.log(`🔍 Search input visible: ${searchVisible}`);
+
+    if (!searchVisible) {
+      // Try keyboard shortcut
+      await page.keyboard.press("Control+k");
+      await delay(500);
+      const visible2 = await searchInput.isVisible().catch(() => false);
+      console.log(`🔍 Search after Ctrl+K: ${visible2}`);
+      await page.screenshot({ path: "/tmp/04b-search-kbd.png" });
+    }
+
+    await searchInput.waitFor({ timeout: 8000 });
     await searchInput.fill(reservationId);
     console.log(`✅ Typed ${reservationId} in search`);
     await delay(2000);
@@ -274,8 +299,22 @@ async function fillInventory(reservationId, categories) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+const fs = require("fs");
+
 app.get("/", (req, res) => {
   res.json({ status: "ok", service: "Elromco Inventory Bot v2" });
+});
+
+// View debug screenshots — open in browser to see what bot sees
+app.get("/screenshot/:name", (req, res) => {
+  const file = `/tmp/${req.params.name}`;
+  if (fs.existsSync(file)) {
+    res.setHeader("Content-Type", "image/png");
+    res.send(fs.readFileSync(file));
+  } else {
+    const files = fs.readdirSync("/tmp").filter(f => f.endsWith(".png"));
+    res.status(404).json({ error: "Not found", available: files });
+  }
 });
 
 app.post("/fill-inventory", async (req, res) => {
