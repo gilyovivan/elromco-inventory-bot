@@ -168,9 +168,17 @@ async function runReport(mode = "week") {
 
     // ── 2. NAVIGATE TO REPORTS ───────────────────────────────────────────────
     console.log("📈 Navigating to reports...");
-    await page.goto(ELROMCO_URL + "/reports", { waitUntil: "domcontentloaded" });
-    await delay(3000);
+    await page.goto(ELROMCO_URL + "/reports", { waitUntil: "networkidle" });
+    await delay(5000);
 
+    // If redirected away from reports (e.g. to calendar) — navigate again
+    if (!page.url().includes("/reports")) {
+      console.log("⚠️ Redirected to:", page.url(), "— retrying reports...");
+      await page.goto(ELROMCO_URL + "/reports", { waitUntil: "networkidle" });
+      await delay(5000);
+    }
+
+    console.log("📍 Reports URL:", page.url());
     await page.screenshot({ path: "/tmp/report-01-loaded.png" });
     console.log("📸 Reports page loaded");
 
