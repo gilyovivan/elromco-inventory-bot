@@ -210,55 +210,82 @@ async function runReport(mode = "week") {
 
     console.log("✅ Logged in. URL:", page.url());
 
-    // ── 2. NAVIGATE TO REPORTS ───────────────────────────────────────────────
+    // ── 2. NAVIGATE TO REPORTS via sidebar ──────────────────────────────────
     console.log("📈 Navigating to reports...");
-    await page.goto(ELROMCO_URL + "/reports", { waitUntil: "networkidle" });
-    await delay(5000);
+    await delay(2000);
+    await page.screenshot({ path: "/tmp/report-00-after-login.png" });
 
-    // If redirected away from reports (e.g. to calendar) — navigate again
+    // Try direct URL
+    await page.goto(ELROMCO_URL + "/reports", { waitUntil: "domcontentloaded" });
+    await delay(3000);
+
+    // If redirected — click sidebar icon by coordinates
+    // From screenshot: left sidebar x=18, reports (chart) icon at y=475
     if (!page.url().includes("/reports")) {
-      console.log("⚠️ Redirected to:", page.url(), "— retrying reports...");
-      await page.goto(ELROMCO_URL + "/reports", { waitUntil: "networkidle" });
-      await delay(5000);
+      console.log("⚠️ Redirected, clicking sidebar reports icon...");
+      for (const y of [475, 460, 490, 450, 510]) {
+        await page.mouse.click(18, y);
+        await delay(2000);
+        if (page.url().includes("/reports")) {
+          console.log(`✅ Reports opened at y=${y}`);
+          break;
+        }
+      }
     }
 
-    console.log("📍 Reports URL:", page.url());
+    await delay(2000);
+    console.log("📍 URL:", page.url());
     await page.screenshot({ path: "/tmp/report-01-loaded.png" });
-    console.log("📸 Reports page loaded");
 
-    // ── 3. SET DATE RANGE ────────────────────────────────────────────────────
-    console.log(`📅 Setting date range: ${dateRange.from} → ${dateRange.to}`);
+    // ── 3. SELECT DATE RANGE via preset buttons ───────────────────────────────
+    console.log(`📅 Setting date range for mode: ${mode}`);
 
-    // Try to find date picker inputs
-    const dateInputs = await page.locator('input[type="date"], input[placeholder*="date" i], input[placeholder*="Date" i], input[placeholder*="mm/dd" i]').all();
-    console.log(`🔍 Found ${dateInputs.length} date inputs`);
-
-    if (dateInputs.length >= 2) {
-      await dateInputs[0].fill(dateRange.from);
-      await delay(500);
-      await dateInputs[1].fill(dateRange.to);
-      await delay(500);
-
-      // Press Enter or click Apply
-      const applyBtn = page.locator('button:has-text("Apply"), button:has-text("APPLY"), button:has-text("Search"), button:has-text("Filter")').first();
-      if (await applyBtn.count() > 0) {
-        await applyBtn.click();
-      } else {
-        await page.keyboard.press("Enter");
-      }
-      await delay(2000);
-      console.log("✅ Date range set");
+    // Click the date picker area to open calendar
+    const datePicker = page.locator('[class*="date"], [class*="Date"], text=/\d{2}\/\d{2}\/\d{4}\s*-\s*\d{2}\/\d{2}\/\d{4}/').first();
+    if (await datePicker.count() > 0) {
+      await datePicker.click();
+      await delay(1000);
     } else {
-      // Try clicking a date range picker / calendar button
-      const calBtn = page.locator('[aria-label*="date" i], [aria-label*="calendar" i], button:has-text("This Week"), button:has-text("Last 7")').first();
-      if (await calBtn.count() > 0) {
-        await calBtn.click();
-        await delay(1000);
+      // Click by coordinates — date range is top right corner around x=1290, y=205
+      await page.mouse.click(1290, 205);
+      await delay(1000);
+    }
+
+    await page.screenshot({ path: "/tmp/report-02-calendar-open.png" });
+
+    // Click the preset button based on mode
+    const presetMap = {
+      week:     ["Last 7 Days", "Last7Days", "Last 7"],
+      month:    ["This Month", "ThisMonth"],
+      lastweek: ["Last Week", "LastWeek"],
+      lastmonth:["Last Month", "LastMonth"],
+    };
+
+    const presets = presetMap[mode] || presetMap.week;
+    let presetClicked = false;
+
+    for (const label of presets) {
+      const btn = page.locator(`text="${label}", button:has-text("${label}")`).first();
+      if (await btn.count() > 0) {
+        await btn.click();
+        await delay(2000);
+        console.log(`✅ Clicked preset: ${label}`);
+        presetClicked = true;
+        break;
       }
-      console.log("⚠️ Date inputs not found — using current view");
+    }
+
+    if (!presetClicked) {
+      console.log("⚠️ Preset button not found — using current date range");
+      // Close calendar by pressing Escape
+      await page.keyboard.press("Escape");
+      await delay(500);
     }
 
     await page.screenshot({ path: "/tmp/report-02-dated.png" });
+    console.log("📸 Date range set");
+
+
 
     // ── 4. SCROLL & SCREENSHOT ALL SECTIONS ──────────────────────────────────
     console.log("📸 Taking full-page screenshot...");
