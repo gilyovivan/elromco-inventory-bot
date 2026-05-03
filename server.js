@@ -241,33 +241,38 @@ async function runReport(mode = "week") {
     console.log(`📅 Setting date range for mode: ${mode}`);
 
     // Click date picker to open calendar
-    // From screenshot: date icon at top right ~x=1135, y=231
-    await page.mouse.click(1135, 231);
-    await delay(1500);
+    // From screenshot (1440x900): date range text at ~x=1140, y=288
+    console.log("📅 Clicking date picker...");
+    
+    // Try by text first
+    const dateRangeEl = page.locator('text="05/01/2026 - 05/31/2026"').first();
+    if (await dateRangeEl.count() > 0) {
+      await dateRangeEl.click();
+      console.log("✅ Clicked date range by text");
+    } else {
+      // Try clicking the calendar icon area
+      await page.mouse.click(1140, 288);
+      console.log("✅ Clicked date picker by coords (1140, 288)");
+    }
+    await delay(2000);
     await page.screenshot({ path: "/tmp/report-02-calendar-open.png" });
     console.log("📸 Calendar open screenshot saved");
 
-    // Preset button coordinates from screenshot:
-    // Today ~y=259, Yesterday ~y=276, This Week ~y=293, Last Week ~y=310
-    // Last 7 Days ~y=327, This Month ~y=344, Last Month ~y=361
-    const presetCoords = {
-      week:      { x: 1338, y: 327, label: "Last 7 Days" },
-      month:     { x: 1338, y: 344, label: "This Month"  },
-      lastweek:  { x: 1338, y: 310, label: "Last Week"   },
-      lastmonth: { x: 1338, y: 361, label: "Last Month"  },
+    // Now click preset by text — most reliable
+    const presetLabels = {
+      week:      "Last 7 Days",
+      month:     "This Month",
+      lastweek:  "Last Week",
+      lastmonth: "Last Month",
     };
+    const presetLabel = presetLabels[mode] || "Last 7 Days";
 
-    const preset = presetCoords[mode] || presetCoords.week;
-
-    // First try by text
-    const presetBtn = page.locator(`text="${preset.label}"`).first();
+    const presetBtn = page.locator(`text="${presetLabel}"`).first();
     if (await presetBtn.count() > 0) {
       await presetBtn.click();
-      console.log(`✅ Clicked preset by text: ${preset.label}`);
+      console.log(`✅ Clicked preset: ${presetLabel}`);
     } else {
-      // Fallback to coordinates
-      await page.mouse.click(preset.x, preset.y);
-      console.log(`✅ Clicked preset by coords (${preset.x}, ${preset.y}): ${preset.label}`);
+      console.log(`⚠️ Preset "${presetLabel}" not found — check calendar-open screenshot`);
     }
     await delay(2000);
 
