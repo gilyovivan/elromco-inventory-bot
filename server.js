@@ -237,6 +237,13 @@ async function runReport(mode = "week") {
 
     await delay(2000);
     console.log("📍 URL:", page.url());
+    // Click General Statistics tab explicitly
+    const generalTab = page.locator('text="General Statistics"').first();
+    if (await generalTab.count() > 0) {
+      await generalTab.click();
+      console.log("✅ Clicked General Statistics tab");
+      await delay(1500);
+    }
     // Re-apply zoom after page load
     await page.evaluate(() => { document.body.style.zoom = "0.75"; });
     await delay(500);
@@ -278,10 +285,8 @@ async function runReport(mode = "week") {
     }
     await delay(2000);
 
-    // Close calendar by pressing Escape and clicking outside
+    // Close calendar by pressing Escape only — no mouse click to avoid accidental tab clicks
     await page.keyboard.press("Escape");
-    await delay(500);
-    await page.mouse.click(400, 150); // click away from calendar
     await delay(1500);
 
     await page.screenshot({ path: "/tmp/report-02-dated.png" });
