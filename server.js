@@ -273,20 +273,26 @@ async function runReport(mode = "week") {
     }
     await delay(2000);
 
+    // Close calendar by pressing Escape and clicking outside
+    await page.keyboard.press("Escape");
+    await delay(500);
+    await page.mouse.click(400, 150); // click away from calendar
+    await delay(1500);
+
     await page.screenshot({ path: "/tmp/report-02-dated.png" });
     console.log("📸 Date range set");
 
 
 
     // ── 4. SCROLL TO BOTTOM & SCREENSHOT ────────────────────────────────────
-    console.log("📸 Scrolling and screenshotting...");
+    console.log("📸 Scrolling to load all content...");
     await delay(2000);
 
-    // Scroll to bottom slowly so all lazy-loaded content renders
+    // Slow scroll to bottom — triggers lazy loading of all tables
     await page.evaluate(async () => {
       await new Promise(resolve => {
         let totalHeight = 0;
-        const distance = 300;
+        const distance = 200;
         const timer = setInterval(() => {
           window.scrollBy(0, distance);
           totalHeight += distance;
@@ -294,24 +300,22 @@ async function runReport(mode = "week") {
             clearInterval(timer);
             resolve();
           }
-        }, 200);
+        }, 300);
       });
     });
-    await delay(2000);
+    await delay(3000); // wait for all tables to render
+
+    // Screenshot at bottom (tables: Assignment, Source, Move Type)
+    await page.screenshot({ path: "/tmp/report-04-bottom.png" });
+    console.log("✅ Bottom screenshot taken");
 
     // Scroll back to top
     await page.evaluate(() => window.scrollTo(0, 0));
     await delay(1000);
 
-    // Full page screenshot — captures everything
+    // Full page screenshot — captures EVERYTHING top to bottom
     const fullPageBuffer = await page.screenshot({ path: "/tmp/report-03-full.png", fullPage: true });
     console.log("✅ Full page screenshot taken");
-
-    // Also screenshot bottom section (tables) separately
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await delay(500);
-    await page.screenshot({ path: "/tmp/report-04-bottom.png" });
-    await page.evaluate(() => window.scrollTo(0, 0));
 
     // ── 5. ANALYZE WITH CLAUDE ───────────────────────────────────────────────
     console.log("🧠 Sending to Claude for analysis...");
