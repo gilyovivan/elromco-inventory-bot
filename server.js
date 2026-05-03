@@ -19,21 +19,43 @@ const fs    = require("fs");
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getDateRange(mode = "week") {
-  const now   = new Date();
-  const toDate = new Date(now);
+  const now    = new Date();
+  let fromDate, toDate;
 
-  let fromDate;
-  if (mode === "week") {
+  if (mode === "today") {
+    fromDate = new Date(now);
+    toDate   = new Date(now);
+  } else if (mode === "yesterday") {
+    fromDate = new Date(now);
+    fromDate.setDate(now.getDate() - 1);
+    toDate   = new Date(fromDate);
+  } else if (mode === "week") {
     fromDate = new Date(now);
     fromDate.setDate(now.getDate() - 7);
-  } else if (mode === "month") {
-    fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    toDate   = new Date(now);
+  } else if (mode === "thisweek") {
+    // Monday of current week
+    const day = now.getDay() || 7;
+    fromDate  = new Date(now);
+    fromDate.setDate(now.getDate() - day + 1);
+    toDate    = new Date(now);
   } else if (mode === "lastweek") {
-    // Mon-Sun of previous week
     const day = now.getDay() || 7;
     fromDate  = new Date(now);
     fromDate.setDate(now.getDate() - day - 6);
+    toDate    = new Date(now);
     toDate.setDate(now.getDate() - day);
+  } else if (mode === "month") {
+    fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    toDate   = new Date(now);
+  } else if (mode === "lastmonth") {
+    fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    toDate   = new Date(now.getFullYear(), now.getMonth(), 0);
+  } else {
+    // default: last 7 days
+    fromDate = new Date(now);
+    fromDate.setDate(now.getDate() - 7);
+    toDate   = new Date(now);
   }
 
   const fmt = d =>
@@ -301,9 +323,12 @@ async function runReport(mode = "week") {
 
     // Click preset button by text
     const presetLabels = {
+      today:     "Today",
+      yesterday: "Yesterday",
+      thisweek:  "This Week",
+      lastweek:  "Last Week",
       week:      "Last 7 Days",
       month:     "This Month",
-      lastweek:  "Last Week",
       lastmonth: "Last Month",
     };
     const presetLabel = presetLabels[mode] || "Last 7 Days";
@@ -407,12 +432,19 @@ async function sendTelegramKeyboard(text) {
       reply_markup: {
         inline_keyboard: [
           [
+            { text: "📅 Today",       callback_data: "today" },
+            { text: "📅 Yesterday",   callback_data: "yesterday" },
+          ],
+          [
+            { text: "📅 This Week",   callback_data: "thisweek" },
+            { text: "📅 Last Week",   callback_data: "lastweek" },
+          ],
+          [
             { text: "📅 Last 7 Days", callback_data: "week" },
             { text: "📆 This Month",  callback_data: "month" },
           ],
           [
-            { text: "⬅️ Last Week",  callback_data: "lastweek" },
-            { text: "⬅️ Last Month", callback_data: "lastmonth" },
+            { text: "⬅️ Last Month",  callback_data: "lastmonth" },
           ],
         ],
       },
@@ -465,7 +497,7 @@ async function startTelegramPolling() {
         // Handle button presses
         if (update.callback_query) {
           const mode = update.callback_query.data;
-          const allowed = ["week", "month", "lastweek", "lastmonth"];
+          const allowed = ["today", "yesterday", "thisweek", "week", "lastweek", "month", "lastmonth"];
           await answerCallback(update.callback_query.id);
           if (allowed.includes(mode)) {
             await sendTelegram(`⏳ Running *${mode}* report... Check back in ~2 min.`);
@@ -485,7 +517,7 @@ async function startTelegramPolling() {
           await sendTelegramKeyboard(`📊 *Mount Si Movers Analytics*
 
 Choose a report period:`);
-        } else if (["week", "month", "lastweek", "lastmonth"].includes(cmd)) {
+        } else if (["today", "yesterday", "thisweek", "week", "lastweek", "month", "lastmonth"].includes(cmd)) {
           await sendTelegram(`⏳ Running *${cmd}* report... ~2 min.`);
           runReport(cmd).catch(e => console.error("Report error:", e.message));
         } else {
