@@ -240,16 +240,10 @@ async function runReport(mode = "week") {
     // ── 3. SELECT DATE RANGE via preset buttons ───────────────────────────────
     console.log(`📅 Setting date range for mode: ${mode}`);
 
-    // Click the date picker area to open calendar
-    const datePicker = page.locator('[class*="date"], [class*="Date"], text=/\d{2}\/\d{2}\/\d{4}\s*-\s*\d{2}\/\d{2}\/\d{4}/').first();
-    if (await datePicker.count() > 0) {
-      await datePicker.click();
-      await delay(1000);
-    } else {
-      // Click by coordinates — date range is top right corner around x=1290, y=205
-      await page.mouse.click(1290, 205);
-      await delay(1000);
-    }
+    // Click the date picker — top right corner of reports page
+    // From screenshot: date range button at approximately x=1290, y=205
+    await page.mouse.click(1290, 205);
+    await delay(1500);
 
     await page.screenshot({ path: "/tmp/report-02-calendar-open.png" });
 
