@@ -240,25 +240,22 @@ async function runReport(mode = "week") {
     // ── 3. SELECT DATE RANGE via preset buttons ───────────────────────────────
     console.log(`📅 Setting date range for mode: ${mode}`);
 
-    // Click date picker to open calendar
-    // From screenshot (1440x900): date range text at ~x=1140, y=288
+    // Click date picker using exact MUI selector from HTML inspection
     console.log("📅 Clicking date picker...");
-    
-    // Try by text first
-    const dateRangeEl = page.locator('text="05/01/2026 - 05/31/2026"').first();
-    if (await dateRangeEl.count() > 0) {
-      await dateRangeEl.click();
-      console.log("✅ Clicked date range by text");
+
+    const datePickerEl = page.locator('.el-date_range_input input, [data-testvalue]').first();
+    if (await datePickerEl.count() > 0) {
+      await datePickerEl.click();
+      console.log("✅ Clicked date picker via MUI selector");
     } else {
-      // Try clicking the calendar icon area
       await page.mouse.click(1140, 288);
-      console.log("✅ Clicked date picker by coords (1140, 288)");
+      console.log("✅ Clicked date picker via coords fallback");
     }
     await delay(2000);
     await page.screenshot({ path: "/tmp/report-02-calendar-open.png" });
     console.log("📸 Calendar open screenshot saved");
 
-    // Now click preset by text — most reliable
+    // Click preset button by text
     const presetLabels = {
       week:      "Last 7 Days",
       month:     "This Month",
@@ -272,7 +269,7 @@ async function runReport(mode = "week") {
       await presetBtn.click();
       console.log(`✅ Clicked preset: ${presetLabel}`);
     } else {
-      console.log(`⚠️ Preset "${presetLabel}" not found — check calendar-open screenshot`);
+      console.log(`⚠️ Preset not found — check report-02-calendar-open screenshot`);
     }
     await delay(2000);
 
