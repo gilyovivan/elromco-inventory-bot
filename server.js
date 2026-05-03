@@ -476,6 +476,54 @@ async function setMyCommands() {
   });
 }
 
+// ── Q&A about report ────────────────────────────────────────────────────────
+
+async function handleQuestion(question, reportContext) {
+  const fetch = require("node-fetch");
+
+  try {
+    await sendTelegram("🤔 Thinking...");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-opus-4-5",
+        max_tokens: 1000,
+        system: `You are a business advisor for Mount Si Movers, a local moving company in Seattle/Washington State. 
+The owner is asking you questions about their business report. 
+Be direct, specific, and actionable. Use Telegram formatting: *bold* for key points, bullet points with •. 
+Keep responses concise — under 300 words. Answer in the same language the question was asked.`,
+        messages: [
+          {
+            role: "user",
+            content: `Here is the business report:
+
+${reportContext}
+
+---
+
+Owner's question: ${question}`
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    const answer = data.content.map(b => b.text || "").join("");
+    await sendTelegram(answer);
+
+  } catch (err) {
+    console.error("Q&A error:", err.message);
+    await sendTelegram(`❌ Error: ${err.message}`);
+  }
+}
+
 // Long-polling for Telegram updates
 async function startTelegramPolling() {
   const fetch = require("node-fetch");
@@ -506,9 +554,21 @@ async function startTelegramPolling() {
           continue;
         }
 
-        // Handle text commands
+        // Handle text commands and replies
         const text = update.message?.text || "";
         const chatId = update.message?.chat?.id;
+        const replyTo = update.message?.reply_to_message;
+
+        // If user replied to a bot message — treat as question about that report
+        if (replyTo && !text.startsWith("/")) {
+          const reportContext = replyTo.text || replyTo.caption || "";
+          if (reportContext.length > 50) {
+            console.log("💬 Question about report received:", text);
+            await handleQuestion(text, reportContext);
+            continue;
+          }
+        }
+
         if (!text.startsWith("/")) continue;
 
         const cmd = text.split(" ")[0].replace("/", "").replace(`@${process.env.BOT_USERNAME || ""}`, "");
