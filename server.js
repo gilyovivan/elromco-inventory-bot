@@ -132,7 +132,9 @@ async function runReport(mode = "week") {
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage();
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  // Zoom out to 75% — more content fits per screenshot
+  await page.evaluate(() => { document.body.style.zoom = "0.75"; });
   page.setDefaultTimeout(25000);
 
   try {
@@ -235,6 +237,9 @@ async function runReport(mode = "week") {
 
     await delay(2000);
     console.log("📍 URL:", page.url());
+    // Re-apply zoom after page load
+    await page.evaluate(() => { document.body.style.zoom = "0.75"; });
+    await delay(500);
     await page.screenshot({ path: "/tmp/report-01-loaded.png" });
 
     // ── 3. SELECT DATE RANGE via preset buttons ───────────────────────────────
@@ -522,11 +527,15 @@ app.get("/screenshot/:name", (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`\n🤖 Elromco Analytics Bot running on port ${PORT}`);
   console.log(`📡 GET /run/week  — weekly report`);
   console.log(`📡 GET /run/month — monthly report`);
   startScheduler();
   setMyCommands().then(() => console.log("✅ Telegram commands registered"));
   startTelegramPolling().catch(e => console.error("Polling crashed:", e.message));
+
+  // Notify on startup
+  await sendTelegram(`✅ *Moving Analyzer Bot is online*\n\nReady to run reports. Use the buttons below or tap /report`, ).catch(() => {});
+  await sendTelegramKeyboard(`📊 Choose a report period:`).catch(() => {});
 });
