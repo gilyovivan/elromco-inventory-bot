@@ -288,32 +288,23 @@ async function runReport(mode = "week") {
     console.log("📸 Scrolling to load all content...");
     await delay(2000);
 
-    // Slow scroll to bottom — triggers lazy loading of all tables
-    await page.evaluate(async () => {
-      await new Promise(resolve => {
-        let totalHeight = 0;
-        const distance = 200;
-        const timer = setInterval(() => {
-          window.scrollBy(0, distance);
-          totalHeight += distance;
-          if (totalHeight >= document.body.scrollHeight) {
-            clearInterval(timer);
-            resolve();
-          }
-        }, 300);
-      });
-    });
-    await delay(3000); // wait for all tables to render
+    // Scroll down step by step using keyboard — works better in SPA apps
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press("PageDown");
+      await delay(400);
+    }
+    await delay(2000); // wait for tables to render
 
-    // Screenshot at bottom (tables: Assignment, Source, Move Type)
+    // Screenshot at bottom
     await page.screenshot({ path: "/tmp/report-04-bottom.png" });
     console.log("✅ Bottom screenshot taken");
 
     // Scroll back to top
+    await page.keyboard.press("Control+Home");
     await page.evaluate(() => window.scrollTo(0, 0));
-    await delay(1000);
+    await delay(1500);
 
-    // Full page screenshot — captures EVERYTHING top to bottom
+    // Full page screenshot
     const fullPageBuffer = await page.screenshot({ path: "/tmp/report-03-full.png", fullPage: true });
     console.log("✅ Full page screenshot taken");
 
