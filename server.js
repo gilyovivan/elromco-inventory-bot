@@ -436,9 +436,9 @@ async function startTelegramPolling() {
         const cmd = text.split(" ")[0].replace("/", "").replace(`@${process.env.BOT_USERNAME || ""}`, "");
 
         if (cmd === "start" || cmd === "report") {
-          await sendTelegramKeyboard("📊 *Mount Si Movers Analytics*
+          await sendTelegramKeyboard(`📊 *Mount Si Movers Analytics*
 
-Choose a report period:");
+Choose a report period:`);
         } else if (["week", "month", "lastweek", "lastmonth"].includes(cmd)) {
           await sendTelegram(`⏳ Running *${cmd}* report... ~2 min.`);
           runReport(cmd).catch(e => console.error("Report error:", e.message));
