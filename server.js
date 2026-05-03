@@ -57,8 +57,19 @@ async function sendTelegram(text, imageBuffer = null) {
   } else {
     const fetch = require("node-fetch");
     // Split long messages (Telegram limit = 4096)
+    // Split by section headers (##) to keep context intact
     const chunks = [];
-    for (let i = 0; i < text.length; i += 4000) chunks.push(text.slice(i, i + 4000));
+    const sections = text.split(/(?=## )/);
+    let current = "";
+    for (const section of sections) {
+      if ((current + section).length > 3800) {
+        if (current) chunks.push(current.trim());
+        current = section;
+      } else {
+        current += section;
+      }
+    }
+    if (current) chunks.push(current.trim());
     for (const chunk of chunks) {
       await fetch(`${base}/sendMessage`, {
         method:  "POST",
@@ -77,19 +88,40 @@ async function analyzeWithClaude(screenshotBase64, dateRange, mode) {
 
 Analyze this screenshot from their Elromco CRM reports dashboard for the period ${dateRange.from} to ${dateRange.to}.
 
-Extract ALL numbers you can read and provide:
+FORMAT: Write for Telegram messenger. Use ONLY these formatting elements:
+- *bold* for important numbers and labels
+- Bullet points with "•" symbol for lists
+- Simple text lines instead of tables
+- Section headers with emoji like: 📊 KEY NUMBERS
+- NO markdown tables (they don't render in Telegram)
+- NO ### headers
 
-1. **📊 KEY NUMBERS** — list every metric you can read (revenue, orders, conversion rates, lead sources, crew performance, move types)
+Structure your response exactly like this:
 
-2. **✅ WHAT'S WORKING** — 2-3 specific things performing well with exact numbers
+📊 *KEY NUMBERS*
+• Visitors: X
+• Leads: X  
+• Booked: X (X%)
+• Revenue estimate: $X
+• Top source: X
 
-3. **⚠️ PROBLEMS** — 2-3 specific issues or underperformers with exact numbers
+✅ *WHAT'S WORKING*
+1. [specific insight with numbers]
+2. [specific insight with numbers]
 
-4. **💡 ACTION ITEMS** — 3 concrete things the owner should do THIS WEEK based on the data
+⚠️ *PROBLEMS*
+1. [specific problem with numbers]
+2. [specific problem with numbers]
 
-5. **💰 MONEY INSIGHT** — one key financial insight (e.g. best/worst lead source ROI, most profitable move type)
+💡 *ACTION THIS WEEK*
+1. [concrete action]
+2. [concrete action]
+3. [concrete action]
 
-Be specific and direct. Use the actual numbers from the screenshot. Write in a friendly but professional tone — like a smart business advisor texting the owner. Use emojis sparingly. Keep total response under 800 words.`;
+💰 *MONEY INSIGHT*
+[One key financial takeaway in 2-3 sentences]
+
+Be direct and specific. Use actual numbers from the screenshot. Friendly but no-nonsense tone — like a sharp advisor texting the owner. Max 500 words total.`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method:  "POST",
@@ -100,7 +132,7 @@ Be specific and direct. Use the actual numbers from the screenshot. Write in a f
     },
     body: JSON.stringify({
       model:      "claude-opus-4-5",
-      max_tokens: 1500,
+      max_tokens: 2500,
       messages: [{
         role:    "user",
         content: [
