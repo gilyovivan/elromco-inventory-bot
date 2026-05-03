@@ -240,80 +240,76 @@ async function runReport(mode = "week") {
     // ── 3. SELECT DATE RANGE via preset buttons ───────────────────────────────
     console.log(`📅 Setting date range for mode: ${mode}`);
 
-    // Click the date picker — top right corner of reports page
-    // From screenshot: date range button at approximately x=1290, y=205
-    await page.mouse.click(1290, 205);
+    // Click date picker to open calendar
+    // From screenshot: date icon at top right ~x=1135, y=231
+    await page.mouse.click(1135, 231);
     await delay(1500);
-
     await page.screenshot({ path: "/tmp/report-02-calendar-open.png" });
+    console.log("📸 Calendar open screenshot saved");
 
-    // Click the preset button based on mode
-    const presetMap = {
-      week:     ["Last 7 Days", "Last7Days", "Last 7"],
-      month:    ["This Month", "ThisMonth"],
-      lastweek: ["Last Week", "LastWeek"],
-      lastmonth:["Last Month", "LastMonth"],
+    // Preset button coordinates from screenshot:
+    // Today ~y=259, Yesterday ~y=276, This Week ~y=293, Last Week ~y=310
+    // Last 7 Days ~y=327, This Month ~y=344, Last Month ~y=361
+    const presetCoords = {
+      week:      { x: 1338, y: 327, label: "Last 7 Days" },
+      month:     { x: 1338, y: 344, label: "This Month"  },
+      lastweek:  { x: 1338, y: 310, label: "Last Week"   },
+      lastmonth: { x: 1338, y: 361, label: "Last Month"  },
     };
 
-    const presets = presetMap[mode] || presetMap.week;
-    let presetClicked = false;
+    const preset = presetCoords[mode] || presetCoords.week;
 
-    for (const label of presets) {
-      const btn = page.locator(`text="${label}", button:has-text("${label}")`).first();
-      if (await btn.count() > 0) {
-        await btn.click();
-        await delay(2000);
-        console.log(`✅ Clicked preset: ${label}`);
-        presetClicked = true;
-        break;
-      }
+    // First try by text
+    const presetBtn = page.locator(`text="${preset.label}"`).first();
+    if (await presetBtn.count() > 0) {
+      await presetBtn.click();
+      console.log(`✅ Clicked preset by text: ${preset.label}`);
+    } else {
+      // Fallback to coordinates
+      await page.mouse.click(preset.x, preset.y);
+      console.log(`✅ Clicked preset by coords (${preset.x}, ${preset.y}): ${preset.label}`);
     }
-
-    if (!presetClicked) {
-      console.log("⚠️ Preset button not found — using current date range");
-      // Close calendar by pressing Escape
-      await page.keyboard.press("Escape");
-      await delay(500);
-    }
+    await delay(2000);
 
     await page.screenshot({ path: "/tmp/report-02-dated.png" });
     console.log("📸 Date range set");
 
 
 
-    // ── 4. SCROLL & SCREENSHOT ALL SECTIONS ──────────────────────────────────
-    console.log("📸 Taking full-page screenshot...");
-
-    // Wait for data to load
+    // ── 4. SCROLL TO BOTTOM & SCREENSHOT ────────────────────────────────────
+    console.log("📸 Scrolling and screenshotting...");
     await delay(2000);
 
-    // Take full page screenshot
+    // Scroll to bottom slowly so all lazy-loaded content renders
+    await page.evaluate(async () => {
+      await new Promise(resolve => {
+        let totalHeight = 0;
+        const distance = 300;
+        const timer = setInterval(() => {
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+          if (totalHeight >= document.body.scrollHeight) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 200);
+      });
+    });
+    await delay(2000);
+
+    // Scroll back to top
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await delay(1000);
+
+    // Full page screenshot — captures everything
     const fullPageBuffer = await page.screenshot({ path: "/tmp/report-03-full.png", fullPage: true });
     console.log("✅ Full page screenshot taken");
 
-    // Also screenshot individual sections if they exist
-    const sections = [
-      { name: "assignment",  selector: 'text=Assignment' },
-      { name: "source",      selector: 'text=Source' },
-      { name: "movetype",    selector: 'text=Move Type' },
-      { name: "sizofmove",   selector: 'text=Size of Move' },
-    ];
-
-    const sectionScreenshots = [];
-    for (const sec of sections) {
-      const el = page.locator(sec.selector).first();
-      if (await el.count() > 0) {
-        try {
-          await el.scrollIntoViewIfNeeded();
-          await delay(400);
-          const buf = await page.screenshot({ path: `/tmp/report-${sec.name}.png` });
-          sectionScreenshots.push({ name: sec.name, buffer: buf });
-          console.log(`✅ Captured section: ${sec.name}`);
-        } catch (e) {
-          console.log(`⚠️ Couldn't capture ${sec.name}: ${e.message}`);
-        }
-      }
-    }
+    // Also screenshot bottom section (tables) separately
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await delay(500);
+    await page.screenshot({ path: "/tmp/report-04-bottom.png" });
+    await page.evaluate(() => window.scrollTo(0, 0));
 
     // ── 5. ANALYZE WITH CLAUDE ───────────────────────────────────────────────
     console.log("🧠 Sending to Claude for analysis...");
@@ -348,6 +344,112 @@ async function runReport(mode = "week") {
   } finally {
     await browser.close();
     console.log("🔒 Browser closed");
+  }
+}
+
+// ── Telegram Bot Commands ────────────────────────────────────────────────────
+
+async function sendTelegramKeyboard(text) {
+  const fetch = require("node-fetch");
+  await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: TG_CHAT_ID,
+      text,
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "📅 Last 7 Days", callback_data: "week" },
+            { text: "📆 This Month",  callback_data: "month" },
+          ],
+          [
+            { text: "⬅️ Last Week",  callback_data: "lastweek" },
+            { text: "⬅️ Last Month", callback_data: "lastmonth" },
+          ],
+        ],
+      },
+    }),
+  });
+}
+
+async function answerCallback(callbackQueryId) {
+  const fetch = require("node-fetch");
+  await fetch(`https://api.telegram.org/bot${TG_TOKEN}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQueryId }),
+  });
+}
+
+async function setMyCommands() {
+  const fetch = require("node-fetch");
+  await fetch(`https://api.telegram.org/bot${TG_TOKEN}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      commands: [
+        { command: "report", description: "📊 Get a business report" },
+        { command: "week",   description: "📅 Last 7 days report" },
+        { command: "month",  description: "📆 This month report" },
+      ],
+    }),
+  });
+}
+
+// Long-polling for Telegram updates
+async function startTelegramPolling() {
+  const fetch = require("node-fetch");
+  let offset = 0;
+  console.log("🤖 Telegram polling started...");
+
+  while (true) {
+    try {
+      const res = await fetch(
+        `https://api.telegram.org/bot${TG_TOKEN}/getUpdates?offset=${offset}&timeout=30`
+      );
+      const data = await res.json();
+
+      if (!data.ok) { await delay(5000); continue; }
+
+      for (const update of data.result) {
+        offset = update.update_id + 1;
+
+        // Handle button presses
+        if (update.callback_query) {
+          const mode = update.callback_query.data;
+          const allowed = ["week", "month", "lastweek", "lastmonth"];
+          await answerCallback(update.callback_query.id);
+          if (allowed.includes(mode)) {
+            await sendTelegram(`⏳ Running *${mode}* report... Check back in ~2 min.`);
+            runReport(mode).catch(e => console.error("Report error:", e.message));
+          }
+          continue;
+        }
+
+        // Handle text commands
+        const text = update.message?.text || "";
+        const chatId = update.message?.chat?.id;
+        if (!text.startsWith("/")) continue;
+
+        const cmd = text.split(" ")[0].replace("/", "").replace(`@${process.env.BOT_USERNAME || ""}`, "");
+
+        if (cmd === "start" || cmd === "report") {
+          await sendTelegramKeyboard("📊 *Mount Si Movers Analytics*
+
+Choose a report period:");
+        } else if (["week", "month", "lastweek", "lastmonth"].includes(cmd)) {
+          await sendTelegram(`⏳ Running *${cmd}* report... ~2 min.`);
+          runReport(cmd).catch(e => console.error("Report error:", e.message));
+        } else {
+          await sendTelegramKeyboard("Choose a report period:");
+        }
+      }
+    } catch (e) {
+      console.error("Polling error:", e.message);
+      await delay(5000);
+    }
   }
 }
 
@@ -421,4 +523,6 @@ app.listen(PORT, () => {
   console.log(`📡 GET /run/week  — weekly report`);
   console.log(`📡 GET /run/month — monthly report`);
   startScheduler();
+  setMyCommands().then(() => console.log("✅ Telegram commands registered"));
+  startTelegramPolling().catch(e => console.error("Polling crashed:", e.message));
 });
