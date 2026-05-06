@@ -330,10 +330,10 @@ async function runReport(mode = "week") {
 
     const compInput = page.locator('input[placeholder*="company id" i], input[placeholder*="compan" i]').last();
     if (await compInput.count() > 0) {
-      await compInput.triple_click();
+      await compInput.click({ clickCount: 3 });
       await compInput.fill(ELROMCO_COMPID);
     } else if (allInputs.length >= 3) {
-      await allInputs[2].triple_click();
+      await allInputs[2].click({ clickCount: 3 });
       await allInputs[2].fill(ELROMCO_COMPID);
     }
     await delay(300);
