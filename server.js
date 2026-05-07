@@ -424,7 +424,8 @@ async function runReport(mode = "week") {
     }
     await delay(2000);
 
-    await page.screenshot({ path: "/tmp/05-bottom.png" });
+    const bottomBuffer = await page.screenshot({ path: "/tmp/05-bottom.png" });
+    console.log("Bottom screenshot taken");
 
     await page.keyboard.press("Control+Home");
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -444,8 +445,7 @@ async function runReport(mode = "week") {
     await sendTelegram(`Report (${dateRange.from} -> ${dateRange.to}) — top`, fullPageBuffer);
     await delay(800);
 
-    // Send bottom screenshot with tables
-    const bottomBuffer = fs.readFileSync("/tmp/05-bottom.png");
+    // Send bottom screenshot with tables (from memory, not disk)
     await sendTelegram(`Tables: Assignment, Source, Move Type`, bottomBuffer);
     await delay(800);
 
