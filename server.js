@@ -440,8 +440,16 @@ async function runReport(mode = "week") {
 
     // ── 6. SEND ───────────────────────────────────────────────────────────────
     const header = `*Mount Si Movers — Business Report*\n${modeLabel}: ${dateRange.from} -> ${dateRange.to}\n\n`;
-    await sendTelegram(`Report screenshot (${dateRange.from} -> ${dateRange.to})`, fullPageBuffer);
+    // Send top screenshot
+    await sendTelegram(`Report (${dateRange.from} -> ${dateRange.to}) — top`, fullPageBuffer);
     await delay(800);
+
+    // Send bottom screenshot with tables
+    const bottomBuffer = fs.readFileSync("/tmp/05-bottom.png");
+    await sendTelegram(`Tables: Assignment, Source, Move Type`, bottomBuffer);
+    await delay(800);
+
+    // Send analysis
     await sendTelegram(header + analysis);
 
     console.log("Report sent!");
