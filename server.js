@@ -185,12 +185,16 @@ async function setMyCommands() {
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
 
-async function analyzeWithClaude(screenshotBase64, dateRange, mode) {
+async function analyzeWithClaude(topScreenshotBase64, bottomScreenshotBase64, dateRange, mode) {
   const modeLabel = MODE_LABELS[mode] || MODE_LABELS.week;
 
   const prompt = `You are a business analyst for Mount Si Movers, a local moving company in Seattle/Washington State.
 
-Analyze this Elromco CRM reports screenshot for period ${dateRange.from} to ${dateRange.to} (${modeLabel}).
+I am sending TWO screenshots from Elromco CRM for ${dateRange.from} to ${dateRange.to} (${modeLabel}):
+- Image 1: top of page with visitors, leads, booked, revenue
+- Image 2: bottom tables with Assignment, Source, Move Type, Service Type
+
+Analyze BOTH images together for a complete picture.
 
 FORMAT — strict Telegram formatting only:
 - *bold* for numbers and labels
@@ -239,7 +243,8 @@ Use real numbers from the screenshot. Direct tone. Max 400 words.`;
       messages: [{
         role:    "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: "image/png", data: screenshotBase64 } },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: topScreenshotBase64 } },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: bottomScreenshotBase64 } },
           { type: "text",  text: prompt },
         ],
       }],
@@ -448,7 +453,12 @@ async function runReport(mode = "week") {
 
     // ── 5. ANALYZE ────────────────────────────────────────────────────────────
     console.log("Analyzing with Claude...");
-    const analysis = await analyzeWithClaude(fullPageBuffer.toString("base64"), dateRange, mode);
+    const analysis = await analyzeWithClaude(
+      fullPageBuffer.toString("base64"),
+      bottomBuffer.toString("base64"),
+      dateRange,
+      mode
+    );
     console.log("Analysis received");
 
     // ── 6. SEND ───────────────────────────────────────────────────────────────
