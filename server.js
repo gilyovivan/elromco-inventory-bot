@@ -393,12 +393,23 @@ async function runReport(mode = "week") {
     await delay(1500);
     await page.screenshot({ path: "/tmp/03-calendar.png" });
 
+    // Log all visible text to find correct preset label
+    const allText = await page.locator('text=/Today|Yesterday|This Week|Last Week|Last 7 Days|This Month|Last Month|Next Month/').allInnerTexts();
+    console.log("Available presets:", allText);
+
     const presetBtn = page.locator(`text="${PRESET_LABELS[mode]}"`).first();
     if (await presetBtn.count() > 0) {
       await presetBtn.click();
       console.log(`Clicked: ${PRESET_LABELS[mode]}`);
     } else {
-      console.log(`Preset not found: ${PRESET_LABELS[mode]}`);
+      // Try partial match
+      const partial = page.locator(`text=/${PRESET_LABELS[mode]}/i`).first();
+      if (await partial.count() > 0) {
+        await partial.click();
+        console.log(`Clicked partial match: ${PRESET_LABELS[mode]}`);
+      } else {
+        console.log(`Preset not found: ${PRESET_LABELS[mode]}, available: ${allText.join(', ')}`);
+      }
     }
     await delay(2000);
 
@@ -431,7 +442,8 @@ async function runReport(mode = "week") {
     await page.evaluate(() => window.scrollTo(0, 0));
     await delay(1000);
 
-    const fullPageBuffer = await page.screenshot({ path: "/tmp/06-full.png", fullPage: true });
+    // Viewport screenshot (no fullPage — avoids capturing wrong content)
+    const fullPageBuffer = await page.screenshot({ path: "/tmp/06-full.png" });
     console.log("Full screenshot taken");
 
     // ── 5. ANALYZE ────────────────────────────────────────────────────────────
