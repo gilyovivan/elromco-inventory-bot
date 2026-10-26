@@ -5,6 +5,7 @@ const schedule = require("node-schedule");
 const { MODES, getPeriod }              = require("./lib/periods");
 const { collectReport }                 = require("./lib/collect");
 const { analyzeReport, answerQuestion } = require("./lib/claude");
+const { renderReport, packMessages }    = require("./lib/format");
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -45,6 +46,18 @@ async function sendTelegram(text) {
     const sent = await tg("sendMessage", { chat_id: TG_CHAT_ID, text: chunk, parse_mode: "Markdown" });
     // Unbalanced * or _ make Telegram reject the whole message: resend it as plain text.
     if (!sent.ok) await tg("sendMessage", { chat_id: TG_CHAT_ID, text: chunk });
+    await delay(400);
+  }
+}
+
+// Report messages are already packed and HTML-formatted.
+async function sendTelegramHtml(messages) {
+  for (const html of messages) {
+    const sent = await tg("sendMessage", { chat_id: TG_CHAT_ID, text: html, parse_mode: "HTML" });
+    if (!sent.ok) {
+      console.error("Telegram HTML rejected:", sent.description);
+      await tg("sendMessage", { chat_id: TG_CHAT_ID, text: html.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&") });
+    }
     await delay(400);
   }
 }
@@ -99,9 +112,8 @@ async function runReport(mode = "lastweek") {
     const data = await collectReport(period);
     console.log("Data collected, analyzing...");
 
-    const analysis = await analyzeReport(data, period);
-    const header = `*Mount Si Movers — Business Report*\n${period.label}: ${period.from} → ${period.to}\n\n`;
-    await sendTelegram(header + analysis);
+    const report = await analyzeReport(data, period);
+    await sendTelegramHtml(packMessages(renderReport(report, period)));
 
     console.log("Report sent!");
     return { success: true, mode, period };
