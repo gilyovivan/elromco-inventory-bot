@@ -1,17 +1,17 @@
 {
   "name": "elromco-analytics-bot",
-  "version": "1.0.0",
-  "description": "Elromco reports → Claude AI analysis → Telegram",
+  "version": "3.0.0",
+  "description": "MoveBoard (MCP) numbers → Claude analysis → Telegram",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev":   "node server.js"
+    "login": "node scripts/moveboard-login.js",
+    "report": "node scripts/run-report.js"
   },
+  "engines": { "node": ">=22" },
   "dependencies": {
-    "express":      "^4.18.2",
-    "playwright":   "^1.40.0",
-    "node-fetch":   "^2.7.0",
-    "node-schedule": "^2.1.1",
-    "form-data":    "^4.0.0"
+    "@anthropic-ai/sdk": "^1.3.0",
+    "express": "^4.18.2",
+    "node-schedule": "^2.1.1"
   }
 }
