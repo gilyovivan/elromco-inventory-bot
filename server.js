@@ -73,31 +73,62 @@ async function sendTelegramHtml(messages) {
   }
 }
 
-async function sendTelegramKeyboard(text) {
-  await tg("sendMessage", {
-    chat_id:      TG_CHAT_ID,
-    text,
-    parse_mode:   "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: "📅 Today",       callback_data: "today"     },
-          { text: "📅 Yesterday",   callback_data: "yesterday" },
-        ],
-        [
-          { text: "📅 This Week",   callback_data: "thisweek"  },
-          { text: "⬅️ Last Week",   callback_data: "lastweek"  },
-        ],
-        [
-          { text: "📅 Last 7 Days", callback_data: "week"      },
-          { text: "📆 This Month",  callback_data: "month"     },
-        ],
-        [
-          { text: "⬅️ Last Month",  callback_data: "lastmonth" },
-        ],
-      ],
-    },
-  });
+// The standing menu under the text field. A reply keyboard rather than
+// inline buttons: inline ones belong to the message they came with and
+// scroll away with it, while this stays put and is what the owner reaches
+// for on a phone. Button labels follow REPORT_LANGUAGE, and MENU maps each
+// label back to what it runs.
+const RU = (process.env.REPORT_LANGUAGE || "English").toLowerCase().startsWith("rus");
+
+const MENU = RU
+  ? {
+      "📊 Заказы":    { kind: "periods", of: "orders" },
+      "📈 Маркетинг": { kind: "periods", of: "marketing" },
+      "🔍 Поиск":     { kind: "source",  cmd: "seo" },
+      "🌐 Сайт":      { kind: "source",  cmd: "ga" },
+      "💸 Реклама":   { kind: "source",  cmd: "ads" },
+      "📣 В Google":  { kind: "relay",   cmd: "gbp" },
+    }
+  : {
+      "📊 Orders":    { kind: "periods", of: "orders" },
+      "📈 Marketing": { kind: "periods", of: "marketing" },
+      "🔍 Search":    { kind: "source",  cmd: "seo" },
+      "🌐 Website":   { kind: "source",  cmd: "ga" },
+      "💸 Ads":       { kind: "source",  cmd: "ads" },
+      "📣 To Google": { kind: "relay",   cmd: "gbp" },
+    };
+
+function mainMenu() {
+  const labels = Object.keys(MENU);
+  const rows = [];
+  for (let i = 0; i < labels.length; i += 2) rows.push(labels.slice(i, i + 2).map(text => ({ text })));
+  return { keyboard: rows, resize_keyboard: true, is_persistent: true };
+}
+
+/** Period buttons. "orders" keeps its bare mode names, which the polling loop
+ *  already understands; "marketing" prefixes them so the two cannot collide. */
+function periodKeyboard(of) {
+  const p = of === "marketing" ? "mk:" : "";
+  return {
+    inline_keyboard: [
+      [{ text: MODES.today,     callback_data: p + "today"     }, { text: MODES.yesterday, callback_data: p + "yesterday" }],
+      [{ text: MODES.thisweek,  callback_data: p + "thisweek"  }, { text: MODES.lastweek,  callback_data: p + "lastweek"  }],
+      [{ text: MODES.week,      callback_data: p + "week"      }, { text: MODES.month,     callback_data: p + "month"     }],
+      [{ text: MODES.lastmonth, callback_data: p + "lastmonth" }],
+    ],
+  };
+}
+
+const ASK_PERIOD = RU
+  ? { orders: "*Заказы* — за какой период?", marketing: "*Маркетинг* — за какой период?" }
+  : { orders: "*Orders* — which period?",    marketing: "*Marketing* — which period?" };
+
+async function sendMenu(text) {
+  await tg("sendMessage", { chat_id: TG_CHAT_ID, text, parse_mode: "Markdown", reply_markup: mainMenu() });
+}
+
+async function sendPeriods(text, of) {
+  await tg("sendMessage", { chat_id: TG_CHAT_ID, text, parse_mode: "Markdown", reply_markup: periodKeyboard(of) });
 }
 
 // Hands an update to the website, which answers in this chat as this bot.
@@ -238,6 +269,12 @@ async function startTelegramPolling() {
             startReport(mode);
             continue;
           }
+          if (mode?.startsWith("mk:") && ALLOWED_MODES.includes(mode.slice(3))) {
+            await tg("answerCallbackQuery", { callback_query_id: update.callback_query.id });
+            await sendTelegram(`Collecting ${MODES[mode.slice(3)]}: search, site and ads... ~1-2 min.`).catch(() => {});
+            runMarketingReport(mode.slice(3)).catch(e => console.error("marketing:", e.message));
+            continue;
+          }
           // Not a report period, so it belongs to the website — the Publish
           // and Skip buttons under a Business Profile draft. The site closes
           // the spinner itself; we only do it if the relay never got there,
@@ -257,6 +294,22 @@ async function startTelegramPolling() {
         }
 
         const msgText = update.message?.text || "";
+
+        // A tap on the standing menu arrives as plain text. Checked before the
+        // Q&A branch so a label is never mistaken for a question.
+        const label = msgText.trim();
+        const menu = Object.hasOwn(MENU, label) ? MENU[label] : null;
+        if (menu) {
+          if (menu.kind === "periods") {
+            await sendPeriods(ASK_PERIOD[menu.of], menu.of);
+          } else if (menu.kind === "source") {
+            runMarketingSource(menu.cmd).catch(e => console.error(`${menu.cmd}:`, e.message));
+          } else {
+            await relayToSite({ message: { ...update.message, text: "/" + menu.cmd } });
+          }
+          continue;
+        }
+
         const replyTo = update.message?.reply_to_message;
 
         if (replyTo && !msgText.startsWith("/")) {
@@ -271,7 +324,7 @@ async function startTelegramPolling() {
 
         const cmd = msgText.split(" ")[0].slice(1).split("@")[0].toLowerCase();
 
-        if (MARKETING_REPORTS[cmd]) {
+        if (Object.hasOwn(MARKETING_REPORTS, cmd)) {
           runMarketingSource(cmd).catch(e => console.error(`${cmd}:`, e.message));
           continue;
         }
@@ -288,12 +341,14 @@ async function startTelegramPolling() {
           continue;
         }
 
-        if (cmd === "start" || cmd === "report") {
-          await sendTelegramKeyboard("*Mount Si Movers Analytics*\n\nChoose a report period:");
+        if (cmd === "start") {
+          await sendMenu("*Mount Si Movers Analytics*");
+        } else if (cmd === "report") {
+          await sendPeriods(ASK_PERIOD.orders, "orders");
         } else if (ALLOWED_MODES.includes(cmd)) {
           startReport(cmd);
         } else {
-          await sendTelegramKeyboard("Choose a report period:");
+          await sendMenu("*Mount Si Movers Analytics*");
         }
       }
     } catch (e) {
