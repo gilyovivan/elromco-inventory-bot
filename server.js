@@ -15,6 +15,13 @@ const TG_TOKEN   = process.env.TELEGRAM_BOT_TOKEN || "";
 const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const PORT       = process.env.PORT || 3000;
 
+// The mountsimovers.com site posts its Business Profile drafts through this
+// bot, because a Telegram bot has exactly one receiver and this one polls.
+// Anything we don't recognise is relayed to the site's webhook, which owns
+// that flow. Without SITE_WEBHOOK_SECRET the relay is simply off.
+const SITE_WEBHOOK_URL    = process.env.SITE_WEBHOOK_URL || "https://www.mountsimovers.com/api/telegram-webhook";
+const SITE_WEBHOOK_SECRET = process.env.SITE_WEBHOOK_SECRET || "";
+
 const ALLOWED_MODES = Object.keys(MODES);
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
@@ -89,6 +96,27 @@ async function sendTelegramKeyboard(text) {
   });
 }
 
+// Hands an update to the website, which answers in this chat as this bot.
+// Best-effort: a relay failure must never stop the polling loop.
+async function relayToSite(update) {
+  if (!SITE_WEBHOOK_SECRET) return false;
+  try {
+    const res = await fetch(SITE_WEBHOOK_URL, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Api-Secret-Token": SITE_WEBHOOK_SECRET,
+      },
+      body: JSON.stringify(update),
+    });
+    if (!res.ok) console.error("Relay rejected:", res.status);
+    return res.ok;
+  } catch (e) {
+    console.error("Relay failed:", e.message);
+    return false;
+  }
+}
+
 async function setMyCommands() {
   await tg("setMyCommands", {
     commands: [
@@ -98,6 +126,8 @@ async function setMyCommands() {
       { command: "month",     description: "📆 This month" },
       { command: "lastmonth", description: "⬅️ Last month" },
       { command: "today",     description: "📅 Today" },
+      { command: "gbp",       description: "📣 Offer the latest post to Google" },
+      { command: "gbpnext",   description: "🗂 Next post from the archive queue" },
     ],
   });
 }
@@ -161,8 +191,26 @@ async function startTelegramPolling() {
 
         if (update.callback_query) {
           const mode = update.callback_query.data;
-          await tg("answerCallbackQuery", { callback_query_id: update.callback_query.id });
-          if (ALLOWED_MODES.includes(mode)) startReport(mode);
+          if (ALLOWED_MODES.includes(mode)) {
+            await tg("answerCallbackQuery", { callback_query_id: update.callback_query.id });
+            startReport(mode);
+            continue;
+          }
+          // Not a report period, so it belongs to the website — the Publish
+          // and Skip buttons under a Business Profile draft. The site closes
+          // the spinner itself; we only do it if the relay never got there,
+          // otherwise the button spins forever with no explanation.
+          if (!(await relayToSite(update))) {
+            await tg("answerCallbackQuery", { callback_query_id: update.callback_query.id, text: "Couldn't reach the site — try again." });
+          }
+          continue;
+        }
+
+        // A photo is a picture for a Business Profile draft, never a question.
+        // Checked before the Q&A branch below, which would otherwise see a
+        // reply with no text and ask Claude an empty question.
+        if (update.message?.photo) {
+          await relayToSite(update);
           continue;
         }
 
@@ -180,6 +228,12 @@ async function startTelegramPolling() {
         if (!msgText.startsWith("/")) continue;
 
         const cmd = msgText.split(" ")[0].slice(1).split("@")[0].toLowerCase();
+
+        // Business Profile commands live on the website.
+        if (cmd === "gbp" || cmd === "gbpnext") {
+          await relayToSite(update);
+          continue;
+        }
 
         if (cmd === "start" || cmd === "report") {
           await sendTelegramKeyboard("*Mount Si Movers Analytics*\n\nChoose a report period:");
