@@ -4,8 +4,12 @@ const schedule = require("node-schedule");
 
 const { MODES, getPeriod }              = require("./lib/periods");
 const { collectReport }                 = require("./lib/collect");
-const { analyzeReport, answerQuestion } = require("./lib/claude");
+const { analyzeReport, analyzeMarketing, answerQuestion } = require("./lib/claude");
 const { renderReport, packMessages }    = require("./lib/format");
+const {
+  collectSearchConsole, collectAnalytics, collectAds, collectMarketing,
+  renderSearchConsole, renderAnalytics, renderAds, renderMarketing,
+} = require("./lib/marketing");
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -126,6 +130,10 @@ async function setMyCommands() {
       { command: "month",     description: "📆 This month" },
       { command: "lastmonth", description: "⬅️ Last month" },
       { command: "today",     description: "📅 Today" },
+      { command: "marketing", description: "📊 Search + site + ads, with the verdict" },
+      { command: "seo",       description: "🔍 Google Search only" },
+      { command: "ga",        description: "📈 Website traffic only" },
+      { command: "ads",       description: "💸 ChatGPT ads only" },
       { command: "gbp",       description: "📣 Offer the latest post to Google" },
       { command: "gbpnext",   description: "🗂 Next post from the archive queue" },
     ],
@@ -151,6 +159,40 @@ async function runReport(mode = "lastweek") {
     console.error("ERROR:", err.message);
     await sendTelegram(`Report error (${mode}): ${err.message}`).catch(() => {});
     throw err;
+  }
+}
+
+// The three sources on their own: plain numbers, no Claude, a few seconds.
+// MARKETING_REPORTS maps a command to how it is collected and rendered.
+const MARKETING_REPORTS = {
+  seo: { collect: collectSearchConsole, render: renderSearchConsole, label: "🔍 Google Search" },
+  ga:  { collect: collectAnalytics,     render: renderAnalytics,     label: "📈 Website" },
+  ads: { collect: collectAds,           render: renderAds,           label: "💸 ChatGPT ads" },
+};
+
+async function runMarketingSource(cmd, mode = "week") {
+  const { collect, render, label } = MARKETING_REPORTS[cmd];
+  const period = getPeriod(mode);
+  console.log(`${cmd.toUpperCase()}: ${mode} | ${period.from} -> ${period.to}`);
+  try {
+    await sendTelegramHtml(packMessages(render(await collect(period), period)));
+  } catch (err) {
+    console.error(`${cmd} error:`, err.message);
+    await sendTelegram(`${label} failed: ${err.message}`).catch(() => {});
+  }
+}
+
+// All three at once, with Claude's verdict over them.
+async function runMarketingReport(mode = "week") {
+  const period = getPeriod(mode);
+  console.log(`MARKETING: ${mode} | ${period.from} -> ${period.to}`);
+  try {
+    const data = await collectMarketing(period);
+    const report = await analyzeMarketing(data, period);
+    await sendTelegramHtml(packMessages(renderMarketing(report, period)));
+  } catch (err) {
+    console.error("MARKETING error:", err.message);
+    await sendTelegram(`Marketing report failed: ${err.message}`).catch(() => {});
   }
 }
 
@@ -229,6 +271,17 @@ async function startTelegramPolling() {
 
         const cmd = msgText.split(" ")[0].slice(1).split("@")[0].toLowerCase();
 
+        if (MARKETING_REPORTS[cmd]) {
+          runMarketingSource(cmd).catch(e => console.error(`${cmd}:`, e.message));
+          continue;
+        }
+
+        if (cmd === "marketing") {
+          await sendTelegram("Collecting Search Console, Analytics and ads... ~1-2 min.").catch(() => {});
+          runMarketingReport().catch(e => console.error("marketing:", e.message));
+          continue;
+        }
+
         // Business Profile commands live on the website.
         if (cmd === "gbp" || cmd === "gbpnext") {
           await relayToSite(update);
@@ -256,7 +309,10 @@ function startScheduler() {
   const tz = "America/Los_Angeles";
   schedule.scheduleJob({ rule: "0 8 * * 1", tz }, () => runReport("lastweek").catch(e => console.error(e.message)));
   schedule.scheduleJob({ rule: "0 8 1 * *", tz }, () => runReport("lastmonth").catch(e => console.error(e.message)));
-  console.log("Scheduler: Mon 8am PT (last week) + 1st of month 8am PT (last month)");
+  // Half an hour after the orders report, so the two don't arrive on top of
+  // each other and the owner reads the money first.
+  schedule.scheduleJob({ rule: "30 8 * * 1", tz }, () => runMarketingReport("lastweek").catch(e => console.error(e.message)));
+  console.log("Scheduler: Mon 8am PT orders, Mon 8:30am PT marketing, 1st of month 8am PT (last month)");
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
