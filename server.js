@@ -220,7 +220,7 @@ async function runMarketingReport(mode = "week") {
   try {
     const data = await collectMarketing(period);
     const report = await analyzeMarketing(data, period);
-    await sendTelegramHtml(packMessages(renderMarketing(report, period)));
+    await sendTelegramHtml(packMessages(renderMarketing(report, period, data)));
   } catch (err) {
     console.error("MARKETING error:", err.message);
     await sendTelegram(`Marketing report failed: ${err.message}`).catch(() => {});
