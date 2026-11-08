@@ -167,6 +167,7 @@ async function setMyCommands() {
       { command: "ads",       description: "💸 ChatGPT ads only" },
       { command: "gbp",       description: "📣 Offer the latest post to Google" },
       { command: "gbpnext",   description: "🗂 Next post from the archive queue" },
+      { command: "gbpstats",  description: "📍 What the Business Profile did" },
     ],
   });
 }
@@ -335,8 +336,10 @@ async function startTelegramPolling() {
           continue;
         }
 
-        // Business Profile commands live on the website.
-        if (cmd === "gbp" || cmd === "gbpnext") {
+        // Business Profile commands live on the website. Anything missing
+        // from this list falls through to the menu below and never reaches
+        // the site at all, which looks exactly like the site being broken.
+        if (cmd === "gbp" || cmd === "gbpnext" || cmd === "gbpstats") {
           await relayToSite(update);
           continue;
         }
