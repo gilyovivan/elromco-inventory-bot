@@ -168,6 +168,7 @@ async function setMyCommands() {
       { command: "gbp",       description: "📣 Offer the latest post to Google" },
       { command: "gbpnext",   description: "🗂 Next post from the archive queue" },
       { command: "gbpstats",  description: "📍 What the Business Profile did" },
+      { command: "gbpoffer",  description: "🏷 Publish an offer to the profile" },
     ],
   });
 }
@@ -336,10 +337,12 @@ async function startTelegramPolling() {
           continue;
         }
 
-        // Business Profile commands live on the website. Anything missing
-        // from this list falls through to the menu below and never reaches
-        // the site at all, which looks exactly like the site being broken.
-        if (cmd === "gbp" || cmd === "gbpnext" || cmd === "gbpstats") {
+        // Business Profile commands all live on the website. Matched by
+        // prefix rather than by name: the named list was missed twice when a
+        // command was added on the site, and the symptom is the worst kind —
+        // the command never reaches the site at all and the bot answers with
+        // the menu, which looks exactly like the site being broken.
+        if (cmd.startsWith("gbp")) {
           await relayToSite(update);
           continue;
         }
